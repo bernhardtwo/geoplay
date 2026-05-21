@@ -1,0 +1,173 @@
+[project]
+name = "geoplay"
+version = "0.1.0"
+description = "Geo-contextual player segmentation and content recommendation system for location-based mobile games"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "MIT" }
+authors = [
+    { name = "Bernardo Vega", email = "213242668+bernhardtwo@users.noreply.github.com" },
+]
+keywords = [
+    "machine-learning",
+    "geospatial",
+    "recommender-system",
+    "mlops",
+    "fastapi",
+    "clustering",
+    "ranking",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+
+dependencies = [
+    # Core
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "typer>=0.13",
+    "rich>=13.9",
+    "structlog>=24.4",
+    # Data
+    "numpy>=2.1",
+    "pandas>=2.2",
+    "pyarrow>=18.0",
+    # Geospatial
+    "h3>=4.1",
+    # ML
+    "scikit-learn>=1.5",
+    "hdbscan>=0.8.38",
+    "lightgbm>=4.5",
+    # Tracking
+    "mlflow>=2.17",
+]
+
+[project.optional-dependencies]
+serving = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "httpx>=0.27",
+]
+viz = [
+    "matplotlib>=3.9",
+    "seaborn>=0.13",
+    "folium>=0.18",
+]
+
+[project.scripts]
+geoplay = "geoplay.cli.main:app"
+
+[project.urls]
+Repository = "https://github.com/bernhardtwo/geoplay"
+Issues = "https://github.com/bernhardtwo/geoplay/issues"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.8",
+    "mypy>=1.13",
+    "pytest>=8.3",
+    "pytest-cov>=6.0",
+    "pytest-asyncio>=0.24",
+    "pre-commit>=4.0",
+    "types-requests>=2.32",
+    "pandas-stubs>=2.2",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/geoplay"]
+
+# -----------------------------------------------------------------------------
+# Ruff: linting + formatting. Replaces black, isort, flake8.
+# -----------------------------------------------------------------------------
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # flake8-simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501", # line too long (handled by formatter)
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+# -----------------------------------------------------------------------------
+# Mypy: type checking
+# -----------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+
+[[tool.mypy.overrides]]
+module = [
+    "hdbscan.*",
+    "lightgbm.*",
+    "h3.*",
+    "sklearn.*",
+    "mlflow.*",
+]
+ignore_missing_imports = true
+
+# -----------------------------------------------------------------------------
+# Pytest
+# -----------------------------------------------------------------------------
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "-ra",
+]
+markers = [
+    "unit: unit tests",
+    "integration: integration tests",
+    "slow: slow tests",
+]
+
+# -----------------------------------------------------------------------------
+# Coverage
+# -----------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["src/geoplay"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
