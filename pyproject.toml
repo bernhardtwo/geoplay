@@ -109,6 +109,11 @@ ignore = [
     "E501", # line too long (handled by formatter)
 ]
 
+[tool.ruff.lint.per-file-ignores]
+# Typer and FastAPI rely on function-call defaults; this is by design.
+"src/geoplay/cli/*.py" = ["B008"]
+"src/geoplay/api/*.py" = ["B008"]
+
 [tool.ruff.format]
 quote-style = "double"
 indent-style = "space"

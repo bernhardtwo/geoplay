@@ -5,11 +5,14 @@ from __future__ import annotations
 import typer
 from rich.console import Console
 
+from geoplay.cli import data as data_commands
+
 app = typer.Typer(
     name="geoplay",
     help="GeoPlay: Geo-contextual player segmentation and content recommendation.",
     no_args_is_help=True,
 )
+app.add_typer(data_commands.app, name="data")
 console = Console()
 
 
@@ -25,7 +28,7 @@ def version() -> None:
 def info() -> None:
     """Print project info and roadmap status."""
     console.print("[bold cyan]GeoPlay[/] — geo-contextual recommender")
-    console.print("Status: scaffolding complete, awaiting data generation phase.")
+    console.print("Status: data generation phase.")
 
 
 if __name__ == "__main__":
