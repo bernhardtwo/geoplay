@@ -75,6 +75,9 @@ dev = [
     "pre-commit>=4.0",
     "types-requests>=2.32",
     "pandas-stubs>=2.2",
+    "jupyter>=1.1",
+    "ipywidgets>=8.1",
+    "nbconvert>=7.16",
 ]
 
 [build-system]
@@ -113,6 +116,8 @@ ignore = [
 # Typer and FastAPI rely on function-call defaults; this is by design.
 "src/geoplay/cli/*.py" = ["B008"]
 "src/geoplay/api/*.py" = ["B008"]
+# Notebooks naturally have local imports per cell and may use unicode in print strings.
+"notebooks/*.ipynb" = ["E402", "RUF001"]
 
 [tool.ruff.format]
 quote-style = "double"
