@@ -66,6 +66,9 @@ data/processed/*
 !data/interim/.gitkeep
 !data/processed/.gitkeep
 !data/processed/features.parquet
+!data/processed/clusters/
+!data/processed/clusters/clusters.parquet
+!data/processed/clusters/metrics.json
 
 # -----------------------------------------------------------------------------
 # ML artifacts

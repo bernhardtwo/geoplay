@@ -1,0 +1,86 @@
+{
+  "n_players": 50000,
+  "n_features": 54,
+  "n_true_archetypes": 5,
+  "algorithms": [
+    {
+      "algorithm": "hdbscan",
+      "n_predicted_clusters": 5,
+      "n_true_classes": 5,
+      "ari": 1.0,
+      "nmi": 1.0,
+      "homogeneity": 1.0,
+      "completeness": 1.0,
+      "v_measure": 1.0,
+      "noise_fraction": 0.0
+    },
+    {
+      "algorithm": "kmeans",
+      "n_predicted_clusters": 5,
+      "n_true_classes": 5,
+      "ari": 1.0,
+      "nmi": 1.0,
+      "homogeneity": 1.0,
+      "completeness": 1.0,
+      "v_measure": 1.0,
+      "noise_fraction": 0.0
+    },
+    {
+      "algorithm": "gaussian_mixture",
+      "n_predicted_clusters": 5,
+      "n_true_classes": 5,
+      "ari": 0.7915,
+      "nmi": 0.8825,
+      "homogeneity": 0.8541,
+      "completeness": 0.9128,
+      "v_measure": 0.8825,
+      "noise_fraction": 0.0
+    }
+  ],
+  "cluster_purities": {
+    "hdbscan": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0
+    },
+    "kmeans": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 1.0,
+      "4": 1.0
+    },
+    "gaussian_mixture": {
+      "0": 1.0,
+      "1": 1.0,
+      "2": 1.0,
+      "3": 0.7494,
+      "4": 1.0
+    }
+  },
+  "cluster_dominant_archetypes": {
+    "hdbscan": {
+      "0": "commuter",
+      "1": "lunch_player",
+      "2": "weekend_explorer",
+      "3": "casual_evening",
+      "4": "hardcore_raider"
+    },
+    "kmeans": {
+      "0": "lunch_player",
+      "1": "casual_evening",
+      "2": "commuter",
+      "3": "weekend_explorer",
+      "4": "hardcore_raider"
+    },
+    "gaussian_mixture": {
+      "0": "commuter",
+      "1": "weekend_explorer",
+      "2": "lunch_player",
+      "3": "casual_evening",
+      "4": "lunch_player"
+    }
+  }
+}

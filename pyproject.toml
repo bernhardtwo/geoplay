@@ -55,7 +55,8 @@ serving = [
 viz = [
     "matplotlib>=3.9",
     "seaborn>=0.13",
-    "folium>=0.18",
+    "folium>=0.17",
+    "umap-learn>=0.5",
 ]
 
 [project.scripts]
@@ -116,8 +117,8 @@ ignore = [
 # Typer and FastAPI rely on function-call defaults; this is by design.
 "src/geoplay/cli/*.py" = ["B008"]
 "src/geoplay/api/*.py" = ["B008"]
-# Notebooks naturally have local imports per cell and may use unicode in print strings.
 "notebooks/*.ipynb" = ["E402", "RUF001"]
+"src/geoplay/models/*.py" = ["N803", "N806", "RUF001"]
 
 [tool.ruff.format]
 quote-style = "double"
