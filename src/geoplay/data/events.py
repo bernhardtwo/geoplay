@@ -210,8 +210,10 @@ def generate_events_for_player(
     """
     profile = ARCHETYPE_PROFILES[archetype]
 
-    # Step 1: which days the player is active.
-    active_days = sample_active_days(profile, start_date, n_days, rng)
+    # Step 1: which days the player is active, and which active days are atypical
+    # (off-pattern: vacations, illness, social events). Atypical days break the
+    # archetype hour pattern and use a uniform hour distribution.
+    active_days, atypical_days = sample_active_days(profile, start_date, n_days, rng)
     n_active = int(active_days.sum())
     if n_active == 0:
         return _empty_events_df()
@@ -222,18 +224,21 @@ def generate_events_for_player(
     if total_events == 0:
         return _empty_events_df()
 
-    # Step 3: timestamps for each event.
+    # Step 3: timestamps for each event. Each active day knows whether it is
+    # atypical, which propagates into the hour sampling distribution.
     timestamp_chunks: list[npt.NDArray[np.datetime64]] = []
-    active_day_dates = [start_date + pd.Timedelta(days=int(i)) for i in np.where(active_days)[0]]
-    for day_date, n_events in zip(active_day_dates, events_per_day, strict=True):
+    active_day_indices = np.where(active_days)[0]
+    active_day_dates = [start_date + pd.Timedelta(days=int(i)) for i in active_day_indices]
+    active_day_atypical = atypical_days[active_day_indices]
+    for day_date, n_events, is_atypical in zip(
+        active_day_dates, events_per_day, active_day_atypical, strict=True
+    ):
         if n_events > 0:
-            day_timestamps = sample_event_timestamps(profile, day_date, int(n_events), rng)
+            day_timestamps = sample_event_timestamps(
+                profile, day_date, int(n_events), rng, atypical=bool(is_atypical)
+            )
             timestamp_chunks.append(day_timestamps)
     timestamps = np.concatenate(timestamp_chunks)
-
-    # Sort by timestamp so sessions are coherent.
-    order = np.argsort(timestamps)
-    timestamps = timestamps[order]
 
     # Step 4: locations.
     lats, lons = _sample_event_locations(

@@ -4,6 +4,14 @@ Generates event timestamps that follow archetype-specific patterns of
 weekday/weekend activity, hour-of-day preferences, and session bursts.
 The resulting distributions are recoverable by a downstream model using
 cyclical time features (sin/cos of hour and day).
+
+Noise model:
+- HOUR_PEAK_SIGMA controls how tightly activity concentrates around each
+  archetype's peak hours. Larger = more overlap between archetypes.
+- ATYPICAL_DAY_PROBABILITY: chance that any active day is "atypical",
+  where the player's behavior departs from their archetype pattern
+  (vacations, illness, social events, etc.). On atypical days, hours
+  are sampled uniformly across the day instead of from archetype peaks.
 """
 
 from __future__ import annotations
@@ -16,7 +24,13 @@ import numpy.typing as npt
 from geoplay.data.archetypes import ArchetypeProfile
 
 # Standard deviation (in hours) of the Gaussian bumps placed at each peak hour.
-HOUR_PEAK_SIGMA = 1.5
+# Increased from 1.5 to 2.5 to create realistic overlap between archetypes.
+HOUR_PEAK_SIGMA = 2.5
+
+# Probability that an active day is "atypical": the player breaks their
+# archetype pattern and behaves randomly. Simulates vacations, illness,
+# social events, or any disruption to their habitual routine.
+ATYPICAL_DAY_PROBABILITY = 0.08
 
 
 def build_hour_density(peak_hours: tuple[int, ...]) -> npt.NDArray[np.float64]:
@@ -48,6 +62,25 @@ def build_hour_density(peak_hours: tuple[int, ...]) -> npt.NDArray[np.float64]:
     return density / density.sum()
 
 
+def build_uniform_hour_density() -> npt.NDArray[np.float64]:
+    """Build a uniform hour density for atypical days.
+
+    Atypical days simulate disruptions to routine: vacations, illness,
+    social events. Activity can happen at any hour with equal probability,
+    with a mild preference for waking hours (6h-23h) to remain realistic.
+
+    Returns
+    -------
+    np.ndarray
+        Shape (24,), uniform-ish probability density over hours.
+    """
+    density = np.ones(24, dtype=np.float64)
+    # Reduce the very small hours (0-5) to ~30% probability, since most
+    # people are still asleep even on atypical days.
+    density[0:6] *= 0.3
+    return density / density.sum()
+
+
 def is_weekend(date: datetime) -> bool:
     """Return True if the date falls on Saturday or Sunday."""
     # weekday(): Monday=0, Sunday=6.
@@ -59,8 +92,15 @@ def sample_active_days(
     start_date: datetime,
     n_days: int,
     rng: np.random.Generator,
-) -> npt.NDArray[np.bool_]:
-    """For each day in the range, sample whether the player is active that day.
+) -> tuple[npt.NDArray[np.bool_], npt.NDArray[np.bool_]]:
+    """For each day, sample whether the player is active and whether atypical.
+
+    Returns two boolean arrays aligned with the day range:
+    - `active`: True if the player generates events that day
+    - `atypical`: True if the day is an "off-pattern" day (vacations, etc.)
+
+    Atypical flag is independent of activity; an inactive day cannot be
+    atypical because there are no events to deviate.
 
     Parameters
     ----------
@@ -75,8 +115,8 @@ def sample_active_days(
 
     Returns
     -------
-    np.ndarray
-        Boolean array of shape (n_days,), True if active on that day.
+    tuple[np.ndarray, np.ndarray]
+        (active, atypical), both boolean arrays of shape (n_days,).
     """
     activity_probs = np.empty(n_days, dtype=np.float64)
     for i in range(n_days):
@@ -84,7 +124,14 @@ def sample_active_days(
         activity_probs[i] = (
             profile.weekend_activity if is_weekend(date) else profile.weekday_activity
         )
-    return rng.uniform(0.0, 1.0, size=n_days) < activity_probs
+    active = rng.uniform(0.0, 1.0, size=n_days) < activity_probs
+
+    # Atypical days are uncommon. We sample independently; players that are
+    # inactive that day cannot be "atypical" since there are no events.
+    atypical = rng.uniform(0.0, 1.0, size=n_days) < ATYPICAL_DAY_PROBABILITY
+    atypical = atypical & active
+
+    return active, atypical
 
 
 def sample_events_per_day(
@@ -126,11 +173,13 @@ def sample_event_timestamps(
     day_date: datetime,
     n_events: int,
     rng: np.random.Generator,
+    atypical: bool = False,
 ) -> npt.NDArray[np.datetime64]:
     """Sample timestamps for `n_events` events on a given day.
 
-    Hours are sampled from the archetype-specific hour density (weekday or
-    weekend). Minutes and seconds are sampled uniformly within the hour.
+    On normal days, hours follow the archetype-specific hour density.
+    On atypical days, hours follow a uniform distribution (with mild
+    suppression of late-night hours).
 
     Parameters
     ----------
@@ -142,14 +191,19 @@ def sample_event_timestamps(
         Number of timestamps to generate.
     rng : np.random.Generator
         Source of randomness.
+    atypical : bool
+        If True, use uniform hour density instead of archetype peaks.
 
     Returns
     -------
     np.ndarray
         Array of np.datetime64 timestamps of shape (n_events,).
     """
-    peaks = profile.weekend_hour_peaks if is_weekend(day_date) else profile.weekday_hour_peaks
-    hour_density = build_hour_density(peaks)
+    if atypical:
+        hour_density = build_uniform_hour_density()
+    else:
+        peaks = profile.weekend_hour_peaks if is_weekend(day_date) else profile.weekday_hour_peaks
+        hour_density = build_hour_density(peaks)
 
     # Sample hours by inverse CDF over the discrete 24-hour density.
     hours = rng.choice(24, size=n_events, p=hour_density).astype(np.int32)

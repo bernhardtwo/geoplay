@@ -36,8 +36,10 @@ from geoplay.models.evaluation import (
     evaluate_clustering,
 )
 from geoplay.models.visualization import (
+    compute_pca_projection,
     compute_umap_projection,
     plot_confusion_heatmap,
+    plot_pca_scatter_with_centroids,
     plot_side_by_side_umap,
 )
 
@@ -131,14 +133,14 @@ def run_clustering_pipeline(
         f"(n_clusters={result_hdb.n_clusters}, noise={result_hdb.noise_fraction:.1%})"
     )
 
-    log("Fitting KMeans (k=5)")
+    log("Fitting KMeans (k=9)")
     t0 = time.time()
-    result_km = fit_kmeans(X_scaled, n_clusters=5)
+    result_km = fit_kmeans(X_scaled, n_clusters=9)
     log(f"  KMeans done in {time.time()-t0:.1f}s (n_clusters={result_km.n_clusters})")
 
-    log("Fitting GaussianMixture (k=5)")
+    log("Fitting GaussianMixture (k=9)")
     t0 = time.time()
-    result_gmm = fit_gaussian_mixture(X_scaled, n_components=5)
+    result_gmm = fit_gaussian_mixture(X_scaled, n_components=9)
     log(f"  GMM done in {time.time()-t0:.1f}s (n_clusters={result_gmm.n_clusters})")
 
     results: dict[str, ClusteringResult] = {
@@ -173,7 +175,18 @@ def run_clustering_pipeline(
     clusters.to_parquet(clusters_path, engine="pyarrow", index=False)
     log(f"  Wrote {clusters_path} ({clusters_path.stat().st_size / 1024**2:.2f} MB)")
 
-    # 6. Compute UMAP projection (once, for all visualizations).
+    # 6. Compute 2D projections (once, for all visualizations).
+    # PCA is a linear projection with interpretable axes (overlapping clouds);
+    # UMAP is non-linear and exaggerates group separation (isolated islands).
+    # We generate both because they tell complementary stories.
+    log("Computing PCA 2D projection")
+    t0 = time.time()
+    pca_coords, pca_variance = compute_pca_projection(X_scaled)
+    log(
+        f"  PCA done in {time.time()-t0:.1f}s "
+        f"(PC1={pca_variance[0]*100:.1f}%, PC2={pca_variance[1]*100:.1f}% variance)"
+    )
+
     log("Computing UMAP 2D projection")
     t0 = time.time()
     umap_coords = compute_umap_projection(X_scaled)
@@ -200,7 +213,28 @@ def run_clustering_pipeline(
             output_path=confusion_path,
         )
 
-        log(f"  {algo_name}: side_by_side.png + confusion.png written")
+        # PCA scatter: predicted clusters with centroids (interpretable axes,
+        # overlapping clouds). Complements the UMAP side-by-side view.
+        pca_path = figures_dir / f"clusters_{algo_name}_pca.png"
+        plot_pca_scatter_with_centroids(
+            coords=pca_coords,
+            labels=result.labels,
+            explained_variance=pca_variance,
+            title=f"{algo_name}: clusters in PCA space (black = centroids)",
+            output_path=pca_path,
+        )
+
+        log(f"  {algo_name}: side_by_side.png + confusion.png + pca.png written")
+
+    # 7b. PCA scatter colored by TRUE archetype (ground-truth reference).
+    plot_pca_scatter_with_centroids(
+        coords=pca_coords,
+        labels=archetypes,
+        explained_variance=pca_variance,
+        title="Ground truth archetypes in PCA space (black = centroids)",
+        output_path=figures_dir / "archetypes_ground_truth_pca.png",
+    )
+    log("  Ground-truth PCA scatter written")
 
     # 8. Write metrics summary.
     metrics_summary = {

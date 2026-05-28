@@ -1,15 +1,25 @@
 """Visualization helpers for clustering results.
 
-Two main visualization types:
+Three main visualization types:
 
-1. UMAP scatter plots: project the 54-dimensional feature space to 2D
-   using UMAP, then plot points colored by either predicted cluster
-   or true archetype. Side-by-side comparison reveals visual agreement.
+1. PCA scatter plots: project the feature space to 2D using PCA (a linear
+   projection with interpretable axes). Points are colored by cluster with
+   centroids marked. Clusters appear as overlapping clouds, which reflects
+   the true geometry more faithfully than UMAP for closely-related groups.
 
-2. Confusion matrix heatmaps: visualize cluster-archetype overlap.
+2. UMAP scatter plots: project to 2D using UMAP (a non-linear method that
+   exaggerates separation between groups for visibility). Useful to confirm
+   that distinct groups exist, but tends to render clusters as isolated
+   islands even when they partially overlap in the original space.
 
-UMAP is used ONLY for visualization. The clustering itself is performed
-on the full 54-dimensional standardized feature space (see clustering.py).
+3. Confusion matrix heatmaps: visualize cluster-archetype overlap.
+
+Both PCA and UMAP are used ONLY for visualization. The clustering itself is
+performed on the full 54-dimensional standardized feature space.
+
+Showing both projections side by side is deliberate: PCA shows honest linear
+structure (with overlap), UMAP shows group separability. Neither alone tells
+the whole story.
 """
 
 from __future__ import annotations
@@ -22,6 +32,7 @@ import numpy.typing as npt
 import pandas as pd
 import seaborn as sns
 import umap
+from sklearn.decomposition import PCA
 
 
 def compute_umap_projection(
@@ -58,6 +69,124 @@ def compute_umap_projection(
         n_jobs=1,  # required for deterministic output with random_state
     )
     return reducer.fit_transform(X)
+
+
+def compute_pca_projection(
+    X: npt.NDArray[np.float64],
+    n_components: int = 2,
+) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+    """Project a high-dimensional feature matrix to 2D via PCA.
+
+    Unlike UMAP, PCA is a linear projection: the axes are real principal
+    components with an associated explained-variance ratio. Clusters appear
+    as overlapping clouds rather than isolated islands, which more faithfully
+    represents the true geometry for closely-related groups.
+
+    Parameters
+    ----------
+    X : np.ndarray
+        Standardized feature matrix of shape (n_samples, n_features).
+    n_components : int
+        Number of principal components to keep (2 for scatter plots).
+
+    Returns
+    -------
+    tuple[np.ndarray, np.ndarray]
+        (coords, explained_variance_ratio): the 2D projection of shape
+        (n_samples, n_components), and the fraction of variance explained
+        by each component (shape (n_components,)).
+    """
+    pca = PCA(n_components=n_components)
+    coords = pca.fit_transform(X)
+    return coords, pca.explained_variance_ratio_
+
+
+def plot_pca_scatter_with_centroids(
+    coords: npt.NDArray[np.float64],
+    labels: npt.NDArray | pd.Series,
+    explained_variance: npt.NDArray[np.float64],
+    title: str,
+    output_path: Path,
+    point_size: float = 4.0,
+    alpha: float = 0.4,
+    figsize: tuple[float, float] = (11, 8),
+) -> None:
+    """Plot a PCA scatter (PC1 vs PC2) colored by label, with centroids.
+
+    Each cluster is drawn as a translucent cloud of points, with its centroid
+    marked as a large black dot. Noise points (label -1) are drawn in gray
+    without a centroid. The axes report the explained-variance ratio.
+
+    Parameters
+    ----------
+    coords : np.ndarray
+        2D PCA coordinates from compute_pca_projection.
+    labels : np.ndarray or pd.Series
+        Cluster labels (with -1 for noise) or archetype names.
+    explained_variance : np.ndarray
+        Explained-variance ratio per component (from compute_pca_projection).
+    title : str
+        Plot title.
+    output_path : Path
+        Where to save the PNG.
+    point_size : float
+        Marker size for data points.
+    alpha : float
+        Marker transparency.
+    figsize : tuple[float, float]
+        Figure size in inches.
+    """
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    fig, ax = plt.subplots(figsize=figsize)
+
+    labels_array = np.asarray(labels)
+    unique_labels = sorted(set(labels_array), key=lambda x: (str(x) == "-1", str(x)))
+    palette = sns.color_palette("tab10", n_colors=max(len(unique_labels), 10))
+
+    for idx, label in enumerate(unique_labels):
+        mask = labels_array == label
+        is_noise = str(label) == "-1"
+        color = "lightgray" if is_noise else palette[idx % 10]
+        label_str = "noise" if is_noise else str(label)
+        ax.scatter(
+            coords[mask, 0],
+            coords[mask, 1],
+            s=point_size,
+            alpha=alpha,
+            color=color,
+            label=f"{label_str} (n={int(mask.sum()):,})",
+            edgecolors="none",
+        )
+        # Draw centroid for real clusters (not noise).
+        if not is_noise:
+            cx = coords[mask, 0].mean()
+            cy = coords[mask, 1].mean()
+            ax.scatter(
+                cx,
+                cy,
+                s=200,
+                color="black",
+                edgecolors="white",
+                linewidths=1.5,
+                zorder=10,
+            )
+
+    var1 = explained_variance[0] * 100
+    var2 = explained_variance[1] * 100
+    ax.set_xlabel(f"PC1 ({var1:.1f}% variance)", fontsize=12)
+    ax.set_ylabel(f"PC2 ({var2:.1f}% variance)", fontsize=12)
+    ax.set_title(title, fontsize=13)
+    ax.legend(
+        loc="center left",
+        bbox_to_anchor=(1.02, 0.5),
+        markerscale=4,
+        fontsize=8,
+        frameon=True,
+    )
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
 
 
 def plot_umap_scatter(
