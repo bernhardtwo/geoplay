@@ -1,0 +1,45 @@
+# Python and tooling caches
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg-info/
+build/
+dist/
+
+# Git and CI
+.git/
+.github/
+.gitignore
+.pre-commit-config.yaml
+
+# MLflow tracking: the registry stays out of the image
+mlruns/
+mlartifacts/
+mlflow.db
+
+# DVC internals
+.dvc/
+
+# Not needed to serve
+docs/
+tests/
+*.md
+# but the project install reads README.md, so keep it
+!README.md
+
+# Docker files themselves
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# Data: ignore everything except the self-contained serving bundle.
+# Each level is un-ignored in turn so the negation can reach the subfolder.
+data/*
+!data/processed
+data/processed/*
+!data/processed/ranking
+data/processed/ranking/*
+!data/processed/ranking/serving
