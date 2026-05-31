@@ -16,7 +16,7 @@ visit?*
 - **Items:** H3 hexes at resolution 8 (~0.74 km² per cell).
 - **Labels:** binary relevance. A hex is positive (label=1) for a query
   if the player visited it in that window, negative (label=0) otherwise.
-- **Period of day:** four buckets — night (0-5h), morning (6-11h),
+- **Period of day:** four buckets, night (0-5h), morning (6-11h),
   afternoon (12-17h), evening (18-23h). This is coarser than per-hour
   windows (168 per week → 28 per week) but preserves weekday-vs-weekend
   distinction and rough time-of-day patterns. Hourly granularity would
@@ -91,33 +91,33 @@ window length.
 
 17 features in total, organized into four families.
 
-### Query (player) side — 10 features
+### Query (player) side, 10 features
 
 Computed by `compute_player_features` over train events only:
 
-- `player_total_events_log` — log(1 + total events in train)
-- `player_unique_sessions` — distinct sessions in train
-- `player_events_per_session_mean` — engagement intensity
-- `player_active_days_ratio` — share of train days with at least one event
-- `player_weekday_ratio` — share of events on Mon-Fri
-- `player_evening_ratio` — share of events in 18-23h
-- `player_hour_concentration` — `1 - H/log(24)` where H is hour-distribution entropy
-- `player_distance_from_home_mean_km` — typical movement radius
-- `player_unique_hexes_count_log` — log of distinct hexes visited
-- `player_archetype` — categorical (9 levels)
+- `player_total_events_log`: log(1 + total events in train)
+- `player_unique_sessions`: distinct sessions in train
+- `player_events_per_session_mean`: engagement intensity
+- `player_active_days_ratio`: share of train days with at least one event
+- `player_weekday_ratio`: share of events on Mon-Fri
+- `player_evening_ratio`: share of events in 18-23h
+- `player_hour_concentration`: `1 - H/log(24)` where H is hour-distribution entropy
+- `player_distance_from_home_mean_km`: typical movement radius
+- `player_unique_hexes_count_log`: log of distinct hexes visited
+- `player_archetype`: categorical (9 levels)
 
 Curated rather than reused from the clustering feature matrix because
 the clustering features aggregate over the full 180-day window and
 would leak into the ranker. Re-computing on train-only events is the
 correct approach.
 
-### Item (hex) side — 3 features
+### Item (hex) side, 3 features
 
 Computed by `compute_hex_features`:
 
-- `hex_global_popularity` — distinct players who visited the hex in train
-- `hex_total_visits` — total events in the hex in train
-- `hex_n_unique_archetypes` — count of distinct archetypes that visited
+- `hex_global_popularity`: distinct players who visited the hex in train
+- `hex_total_visits`: total events in the hex in train
+- `hex_n_unique_archetypes`: count of distinct archetypes that visited
 
 A fourth feature, `hex_dominant_archetype`, was implemented and then
 discarded. The intent was to surface the type of player most
@@ -128,13 +128,13 @@ of hexes even after normalizing by archetype population. The feature
 was not discriminative and the small simplification was preferable
 to a complex feature that contributed nothing.
 
-### Pair (player × hex) — 2 features
+### Pair (player × hex), 2 features
 
 Computed by `add_pair_features` using precomputed lookups:
 
-- `pair_past_visits` — visits by this player to this hex in train
+- `pair_past_visits`: visits by this player to this hex in train
   (across all periods, not just the query's period)
-- `pair_distance_from_home_km` — haversine distance from the player's
+- `pair_distance_from_home_km`: haversine distance from the player's
   home to the hex centroid
 
 Distribution of `pair_past_visits` between classes (train, full):
@@ -155,10 +155,10 @@ Distribution of `pair_distance_from_home_km`:
 Both features show strong, monotonic class separation. These are by
 far the strongest features in the final model.
 
-### Contextual — 2 features
+### Contextual, 2 features
 
 - `day_of_week` (numeric, 0-6)
-- `period` — categorical (4 levels: night, morning, afternoon, evening)
+- `period`: categorical (4 levels: night, morning, afternoon, evening)
 
 ## Model
 
@@ -171,9 +171,18 @@ search-and-recommendation teams use.
 
 Full cross-validation over the 32.6M-row training set would take
 10-20 hours on a single workstation. Instead, a pragmatic strategy
-was used: random search over 20 trials on a 10% subsample of train
-(3.3M rows, 66,167 queries), validating on a 20% subsample of test
-(4.5M rows, 113,259 queries).
+was used: random search over 20 trials, fitting each trial on a small
+subsample of the train period and validating on an internal holdout of
+train.
+
+The validation slice is carved out of the train period, never from
+test. Concretely, 20% of the train queries (132,335) are held out as
+the validation set, and trials are fit on a 10% subsample of the
+remaining train queries (52,934). The test set is touched exactly once,
+for the final evaluation. Validating against test during the search
+would be selection leakage: the reported test metric would be
+optimistically biased by having picked hyperparameters that happen to
+score well on that specific split.
 
 Search space (1,728 combinations total):
 
@@ -186,13 +195,11 @@ Search space (1,728 combinations total):
 | `bagging_fraction`  | [0.6, 0.8, 1.0]                 |
 | `min_child_samples` | [20, 50, 100]                   |
 
-Random search ran in 14.4 minutes.
-
 ### Tuning observation: the plateau
 
 A striking and informative finding: across 20 trials with radically
-different parameter combinations, NDCG@10 ranged only from 0.6267 to
-0.6323 — a spread of 0.0056 (0.9%). This is the signature of a
+different parameter combinations, validation NDCG@10 ranged only from
+0.7666 to 0.7705, a spread of 0.0039 (0.5%). This is the signature of a
 problem where the model has reached the ceiling of what is learnable
 from the available features.
 
@@ -213,8 +220,21 @@ There are three contributing causes:
    (which counts all visits, not just the capped ones), but it does
    bound how many "easy" duplicates the model sees per query.
 
-The right conclusion is that 0.6337 NDCG@10 represents a sensible
-ceiling for this feature set on this data, not a tuning failure.
+### Validation versus test: the temporal gap
+
+Validation NDCG@10 sits at ~0.77, but the final model scores 0.6337 on
+the test period. That 14-point gap is not a regression, it is the cost
+of generalizing forward in time, and it is the most informative single
+number in this analysis.
+
+Validation queries are drawn from the same period the model trained on,
+so a player's recent history predicts their visits in that same window
+very well. Test queries are in the future (days 150-180), where behavior
+drifts and the 8% atypical days accumulate. The strict temporal split is
+exactly what surfaces this gap honestly. A random holdout of the full
+timeline would have reported the optimistic ~0.77 and concealed the real
+forward-looking performance. The 0.6337 is the number that reflects what
+production would actually see.
 
 ### Best configuration (trial 18)
 
@@ -229,15 +249,17 @@ ceiling for this feature set on this data, not a tuning failure.
 }
 ```
 
-Worth noting: trial 17 with `n_estimators=100` reached 0.6321 (within
-0.0002 of the winner) in roughly one-fifth of the training time. In a
-production setting the choice between these two would lean toward the
-faster model.
+Worth noting: trial 17 (`n_estimators=100`) reached 0.7691 in validation,
+within 0.0014 of the winner, at 8.5 seconds of fit time against the
+winner's 27.6 seconds. In a production setting the choice between these
+two would lean toward the faster model.
 
 ## Final results
 
 Trained the best configuration on the full 32.6M-row train set, then
-evaluated on the full 22.5M-row test set (566,297 queries).
+evaluated on the full 22.5M-row test set (566,297 queries). These are the
+honest forward-looking metrics; see the validation-versus-test gap above
+for why they sit below the tuning numbers.
 
 ### Metrics
 
@@ -282,7 +304,7 @@ and item features playing a supporting role.
 | Hex features                                   | 1.3 min  |
 | Pair lookups                                   | 1.3 min  |
 | Enriched dataset assembly                      | 1.2 min  |
-| Tuning (20 trials, 10% subsample)              | 14.4 min |
+| Tuning (20 trials)                             | ~14 min  |
 | Final fit (full train, 500 trees)              | 6.2 min  |
 | Final predict + eval (full test)               | 1.5 min  |
 | **Total**                                      | **~38 min** |
@@ -290,9 +312,9 @@ and item features playing a supporting role.
 ## Recommendations and next steps
 
 The model is production-grade in its design (temporal split, no
-leakage, industrial objective, hyperparameter tuning, multiple
-metrics) and achieves a strong NDCG@10 of 0.6337 with a +137% lift
-over random. It is ready to serve as the ML component of a
+leakage in features or in tuning, industrial objective, hyperparameter
+search, multiple metrics) and achieves a strong NDCG@10 of 0.6337 with
+a +137% lift over random. It is ready to serve as the ML component of a
 recommendation system.
 
 Concrete improvements that could push the metrics further, in
@@ -304,7 +326,8 @@ descending order of expected impact:
    feature would add real signal.
 2. **Recency-weighted past visits.** Currently `pair_past_visits`
    counts visits over the full 150-day train period uniformly. Visits
-   from the last 7 days should plausibly count more.
+   from the last 7 days should plausibly count more, and this is the
+   most likely lever to narrow the validation-versus-test gap.
 3. **Player embedding via collaborative filtering.** Co-visitation
    patterns ("players who go to hex A also go to hex B") would
    capture similarity that the archetype categorical cannot.
@@ -317,17 +340,20 @@ focused.
 ## Reproducibility
 
 All artifacts in `data/processed/ranking/` are deterministic given the
-seed (42) and the upstream raw events. The pipeline can be re-run end
-to end by invoking each module in sequence: `dataset.py` →
-`player_features.py` → `hex_features.py` → `pair_features.py` →
-`features.py` → `model.py` (with `tuning.py` for hyperparameter
-selection).
+seed (42) and the upstream raw events. Tuning and final training are
+tracked in MLflow on a SQLite backend: each random-search trial is logged
+as a nested run under the search parent, and the final model is logged
+with its parameters, test metrics, and feature importance. The pipeline
+can be re-run end to end by invoking each module in sequence:
+`dataset.py` → `player_features.py` → `hex_features.py` →
+`pair_features.py` → `features.py` → `model.py`, with `tuning.py` for
+hyperparameter selection and `tracking.py` to wrap runs in MLflow.
 
 Final model artifacts:
 
-- `data/processed/ranking/model/model.txt` — LightGBM native serialization
-- `data/processed/ranking/model/params.json` — hyperparameters and feature schema
-- `data/processed/ranking/model/feature_importance.csv` — per-feature gain and split counts
-- `data/processed/ranking/model/metrics.json` — final test metrics
-- `data/processed/ranking/tuning/tuning_trials.csv` — all 20 random-search trials
-- `data/processed/ranking/tuning/best_params.json` — selected configuration
+- `data/processed/ranking/model/model.txt`: LightGBM native serialization
+- `data/processed/ranking/model/params.json`: hyperparameters and feature schema
+- `data/processed/ranking/model/feature_importance.csv`: per-feature gain and split counts
+- `data/processed/ranking/model/metrics.json`: final test metrics
+- `data/processed/ranking/tuning/tuning_trials.csv`: all 20 random-search trials
+- `data/processed/ranking/tuning/best_params.json`: selected configuration
