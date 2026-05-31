@@ -32,10 +32,10 @@ Built as a portfolio project demonstrating production-grade ML engineering: stre
 | 6 | LightGBM ranker (LambdaRank, NDCG@10) | ✅ Done |
 | 7 | MLflow experiment tracking | ✅ Done |
 | 8 | FastAPI serving layer | ✅ Done |
-| 9 | CI/CD with GitHub Actions | ⏳ Planned |
+| 9 | CI/CD with GitHub Actions | ✅ Done |
 | 10 | Containerization with Docker | ⏳ Planned |
 
-**Progress: 8 / 10 phases.**
+**Progress: 9 / 10 phases.**
 
 ## Key results
 
@@ -225,9 +225,8 @@ This project intentionally demonstrates production practices that distinguish ML
 
 ## Roadmap
 
-Phases 9-10 are planned and not yet implemented:
+Phase 10 is planned and not yet implemented:
 
-- **CI/CD pipeline** — GitHub Actions for tests + lint + model regression on every push
 - **Docker containerization** — Dockerfile + docker-compose for reproducible deployment
 
 ## License

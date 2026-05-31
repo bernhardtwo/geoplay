@@ -22,7 +22,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import mlflow
 import mlflow.lightgbm
@@ -97,7 +97,7 @@ def prepare_serving_artifacts(
 
     print("Registering final model in the MLflow Model Registry...")
     mlflow.set_tracking_uri(tracking_uri)
-    runs = mlflow.search_runs(experiment_names=[experiment_name])
+    runs = cast(pd.DataFrame, mlflow.search_runs(experiment_names=[experiment_name]))
     final_runs = runs[runs["tags.mlflow.runName"] == "final_model"]
     if len(final_runs) == 0:
         raise RuntimeError("No 'final_model' run found. Run log_final_model first.")
