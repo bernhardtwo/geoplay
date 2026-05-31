@@ -21,11 +21,8 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
-      - name: Lint (ruff)
-        run: uv run ruff check src/ tests/
-
-      - name: Format check (ruff)
-        run: uv run ruff format --check src/ tests/
+      - name: Lint and format (pre-commit)
+        run: uv run pre-commit run --all-files
 
       - name: Tests (pytest)
         run: uv run pytest -v
