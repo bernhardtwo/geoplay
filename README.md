@@ -30,12 +30,12 @@ Built as a portfolio project demonstrating production-grade ML engineering: stre
 | 4 | Feature engineering (54 features, streaming H3) | ✅ Done |
 | 5 | Player segmentation (HDBSCAN / KMeans / GMM) | ✅ Done |
 | 6 | LightGBM ranker (LambdaRank, NDCG@10) | ✅ Done |
-| 7 | MLflow experiment tracking | ⏳ Planned |
-| 8 | FastAPI serving layer | ⏳ Planned |
+| 7 | MLflow experiment tracking | ✅ Done |
+| 8 | FastAPI serving layer | ✅ Done |
 | 9 | CI/CD with GitHub Actions | ⏳ Planned |
 | 10 | Containerization with Docker | ⏳ Planned |
 
-**Progress: 6 / 10 phases.**
+**Progress: 8 / 10 phases.**
 
 ## Key results
 
@@ -225,10 +225,8 @@ This project intentionally demonstrates production practices that distinguish ML
 
 ## Roadmap
 
-Phases 7-10 are planned and not yet implemented:
+Phases 9-10 are planned and not yet implemented:
 
-- **MLflow experiment tracking** — wrap training in MLflow runs for systematic experiment management
-- **FastAPI serving layer** — expose `/rank` endpoint with cached model loading
 - **CI/CD pipeline** — GitHub Actions for tests + lint + model regression on every push
 - **Docker containerization** — Dockerfile + docker-compose for reproducible deployment
 

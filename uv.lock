@@ -1068,6 +1068,7 @@ name = "geoplay"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "fastapi" },
     { name = "h3" },
     { name = "hdbscan" },
     { name = "lightgbm" },
@@ -1081,6 +1082,7 @@ dependencies = [
     { name = "scikit-learn" },
     { name = "structlog" },
     { name = "typer" },
+    { name = "uvicorn", extra = ["standard"] },
 ]
 
 [package.optional-dependencies]
@@ -1113,6 +1115,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "fastapi", specifier = ">=0.136.1" },
     { name = "fastapi", marker = "extra == 'serving'", specifier = ">=0.115" },
     { name = "folium", marker = "extra == 'viz'", specifier = ">=0.17" },
     { name = "h3", specifier = ">=4.1" },
@@ -1132,6 +1135,7 @@ requires-dist = [
     { name = "structlog", specifier = ">=24.4" },
     { name = "typer", specifier = ">=0.13" },
     { name = "umap-learn", marker = "extra == 'viz'", specifier = ">=0.5" },
+    { name = "uvicorn", extras = ["standard"], specifier = ">=0.47.0" },
     { name = "uvicorn", extras = ["standard"], marker = "extra == 'serving'", specifier = ">=0.32" },
 ]
 provides-extras = ["serving", "viz"]
