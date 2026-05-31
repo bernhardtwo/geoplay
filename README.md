@@ -33,9 +33,9 @@ Built as a portfolio project demonstrating production-grade ML engineering: stre
 | 7 | MLflow experiment tracking | ✅ Done |
 | 8 | FastAPI serving layer | ✅ Done |
 | 9 | CI/CD with GitHub Actions | ✅ Done |
-| 10 | Containerization with Docker | ⏳ Planned |
+| 10 | Containerization with Docker | ✅ Done |
 
-**Progress: 9 / 10 phases.**
+**Progress: 10 / 10 phases.**
 
 ## Key results
 
@@ -225,9 +225,9 @@ This project intentionally demonstrates production practices that distinguish ML
 
 ## Roadmap
 
-Phase 10 is planned and not yet implemented:
+All ten phases are complete. The serving API is containerized: the model is exported from the registry into a self-contained directory and the image serves from that export, so the running container never depends on the development registry.
 
-- **Docker containerization** — Dockerfile + docker-compose for reproducible deployment
+- **Possible future work:** load the LightGBM booster directly to drop MLflow from the runtime image, and use a multi-stage build to ship only the resolved virtualenv.
 
 ## License
 
