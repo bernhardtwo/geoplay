@@ -67,6 +67,25 @@ MRR of 0.87 means the first relevant hex is on average at position 1.15 in the r
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    subgraph offline [Offline pipeline]
+        A[Synthetic events] --> B[Feature engineering<br/>H3 hexes, player/hex/pair]
+        B --> C[Player segmentation<br/>HDBSCAN]
+        B --> D[LightGBM ranker<br/>LambdaRank, NDCG@10]
+        D --> E[(MLflow<br/>tracking + registry)]
+    end
+    E -->|export_model| F[Serving bundle<br/>exported model + features]
+    subgraph online [Online serving]
+        F --> G[FastAPI<br/>RankingService]
+        G --> H[Docker container<br/>POST /rank, GET /health]
+    end
+```
+
+The model is trained, tuned and versioned on the offline side. A single export step copies the registered model into a self-contained bundle, and the container serves from that bundle, so the running service never touches the MLflow registry (`mlflow.db`, `mlartifacts`).
+
+## Project layout
+
 ```
 geoplay/
 ├── data/
@@ -100,7 +119,10 @@ geoplay/
 │       ├── features.py              # Final feature assembly
 │       ├── evaluation.py            # NDCG, MAP, MRR, Precision@K
 │       ├── model.py                 # LGBMRanker wrapper
-│       └── tuning.py                # Random search
+│       ├── tuning.py                # Random search
+│       ├── tracking.py              # MLflow logging
+│       ├── serving.py               # Serving artifacts + RankingService
+│       └── api.py                   # FastAPI app
 └── tests/                           # pytest unit tests
 ```
 
@@ -198,6 +220,43 @@ uv run pytest -v
 # Pre-commit hooks
 uv run pre-commit run --all-files
 ```
+
+## Running the API
+
+Build the image and run the container:
+
+```bash
+docker build -t geoplay-ranking:latest .
+docker run --rm -p 8000:8000 geoplay-ranking:latest
+```
+
+Request the top hexes for a player in a given time window:
+
+```bash
+curl -s -X POST http://localhost:8000/rank \
+  -H 'content-type: application/json' \
+  -d '{"player_id": "0004701a-9ee5-62cb-e1b4-568034c66374", "day_of_week": 2, "period": "evening", "top_k": 5}'
+```
+
+Response (scores rounded for readability):
+
+```json
+{
+  "player_id": "0004701a-9ee5-62cb-e1b4-568034c66374",
+  "n_candidates": 53,
+  "ranked": [
+    {"hex_id": "8848e5b4dbfffff", "score": 8.82},
+    {"hex_id": "8848e5b543fffff", "score": 7.36},
+    {"hex_id": "8848e5b4d1fffff", "score": 5.24},
+    {"hex_id": "8848e5b4d9fffff", "score": 4.43},
+    {"hex_id": "8848e5b4d3fffff", "score": 2.67}
+  ]
+}
+```
+
+The service re-ranks only the hexes the player has already visited (`n_candidates`), since every training pair had at least one prior visit; a hex the player has never seen is outside the model's training distribution. `GET /health` returns the service status and the number of players in the served universe.
+
+The container serves from the exported model bundle. Both the serving directory and the model source are read from the environment (`GEOPLAY_SERVING_DIR`, `GEOPLAY_MODEL_URI`), so the same app runs locally against the MLflow registry or, in the container, against the local export with no registry dependency.
 
 ## Engineering principles
 
