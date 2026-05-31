@@ -7,19 +7,24 @@ prior visit (negatives are sampled from the player's own universe), so a
 zero-visit hex is outside the model's training distribution. This service
 re-ranks the known universe; discovery of new hexes is a different model.
 
-Two parts:
+Parts:
 
 - prepare_serving_artifacts: a one-time build step. The player, hex, and
   pair features do not depend on the query window, so they are all present
   in train_enriched. We deduplicate it to one row per (player, hex), store
   the period categories (their order drives LightGBM's categorical codes),
   and register the final model in the MLflow Model Registry.
-- RankingService: loads the artifacts once and serves ranking requests.
+- export_model: dumps the registered model to a self-contained directory so
+  a container can serve it without the registry (mlflow.db, mlartifacts).
+- RankingService: loads the artifacts once and serves ranking requests. The
+  model source is configurable: a local path (production / container) or,
+  when omitted, the latest registry version (local development).
 """
 
 from __future__ import annotations
 
 import json
+import shutil
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
@@ -42,6 +47,18 @@ def _load_feature_columns(model_params_path: Path) -> tuple[list[str], list[str]
     feature_names = [str(c) for c in data["feature_names"]]
     categorical = [str(c) for c in data["categorical_features"]]
     return feature_names, categorical
+
+
+def _latest_version(client: MlflowClient, registered_model_name: str) -> str:
+    """Return the highest registered version number as a string."""
+    versions = client.search_model_versions(f"name='{registered_model_name}'")
+    if not versions:
+        raise RuntimeError(
+            f"No registered versions for '{registered_model_name}'. "
+            "Run prepare_serving_artifacts first."
+        )
+    latest = max(versions, key=lambda v: int(v.version))
+    return str(latest.version)
 
 
 def prepare_serving_artifacts(
@@ -106,6 +123,28 @@ def prepare_serving_artifacts(
     print(f"  registered '{registered_model_name}' version {version.version} " f"from run {run_id}")
 
 
+def export_model(
+    output_dir: Path,
+    registered_model_name: str = DEFAULT_REGISTERED_MODEL,
+    tracking_uri: str = DEFAULT_TRACKING_URI,
+) -> None:
+    """Export the latest registered model to a self-contained directory.
+
+    A container serves from this directory and never touches the MLflow
+    registry (mlflow.db, mlartifacts) at runtime. This separates "where
+    models are developed and versioned" from "what is served".
+    """
+    mlflow.set_tracking_uri(tracking_uri)
+    client = MlflowClient()
+    version = _latest_version(client, registered_model_name)
+    model = mlflow.lightgbm.load_model(f"models:/{registered_model_name}/{version}")
+
+    if output_dir.exists():
+        shutil.rmtree(output_dir)
+    mlflow.lightgbm.save_model(model, str(output_dir))
+    print(f"Exported '{registered_model_name}' v{version} to {output_dir}")
+
+
 @dataclass
 class RankResult:
     """Result of a ranking request.
@@ -123,16 +162,20 @@ class RankResult:
 
 
 class RankingService:
-    """Loads serving artifacts once and ranks a player's known hexes."""
+    """Loads serving artifacts once and ranks a player's known hexes.
+
+    The model source is configurable. Pass model_uri to load a specific
+    location (e.g. a local exported model in a container); leave it None to
+    resolve the latest version from the MLflow registry (local development).
+    """
 
     def __init__(
         self,
         serving_dir: Path,
+        model_uri: str | None = None,
         registered_model_name: str = DEFAULT_REGISTERED_MODEL,
         tracking_uri: str = DEFAULT_TRACKING_URI,
     ) -> None:
-        mlflow.set_tracking_uri(tracking_uri)
-
         with (serving_dir / "serving_meta.json").open() as f:
             meta: dict[str, Any] = json.load(f)
         self.feature_columns: list[str] = [str(c) for c in meta["feature_columns"]]
@@ -142,18 +185,13 @@ class RankingService:
         # Index by player for fast per-player candidate lookup.
         self._features = features.set_index("player_id", drop=False).sort_index()
 
-        # Resolve the latest registered version (robust across MLflow 3.x).
-        client = MlflowClient()
-        versions = client.search_model_versions(f"name='{registered_model_name}'")
-        if not versions:
-            raise RuntimeError(
-                f"No registered versions for '{registered_model_name}'. "
-                "Run prepare_serving_artifacts first."
-            )
-        latest = max(versions, key=lambda v: int(v.version))
-        self.model: Any = mlflow.lightgbm.load_model(
-            f"models:/{registered_model_name}/{latest.version}"
-        )
+        if model_uri is None:
+            # Resolve from the registry (local / development use).
+            mlflow.set_tracking_uri(tracking_uri)
+            client = MlflowClient()
+            version = _latest_version(client, registered_model_name)
+            model_uri = f"models:/{registered_model_name}/{version}"
+        self.model: Any = mlflow.lightgbm.load_model(model_uri)
 
     def known_players(self) -> int:
         """Number of distinct players in the served universe."""
